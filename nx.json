@@ -56,5 +56,28 @@
         "linter": "eslint"
       }
     }
+  },
+  "targetDefaults": {
+    "@nx/esbuild:esbuild": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    }
+  },
+  "release": {
+    "projects": ["website", "api"],
+    "projectsRelationship": "independent",
+    "changelog": {
+      "projectChangelogs": {
+        "createRelease": "github",
+        "file": false
+      }
+    },
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/apps/{projectName}"
+      },
+      "conventionalCommits": true
+    }
   }
 }

@@ -18,13 +18,14 @@ module.exports = {
     new NxAppWebpackPlugin({
       tsConfig: './tsconfig.app.json',
       compiler: 'babel',
-      main: './src/main.tsx',
+      main: './src/app/main.jsx',
       index: './src/index.html',
       baseHref: '/',
       assets: ['./src/favicon.ico', './src/assets'],
-      styles: ['./src/styles.css'],
+      styles: ['./src/app/index.css'],
       outputHashing: process.env['NODE_ENV'] === 'production' ? 'all' : 'none',
       optimization: process.env['NODE_ENV'] === 'production',
+      generatePackageJson: true
     }),
     new NxReactWebpackPlugin({
       // Uncomment this line if you don't want to use SVGR

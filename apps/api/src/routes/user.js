@@ -80,7 +80,7 @@ const { verifyTokenAndRefresh } = require('../middlewares/authMiddleware');
 
 router.post("/addPet", verifyTokenAndRefresh,handleAddPet);
 router.post("/editPet", verifyTokenAndRefresh, upload.single("petImage"), handleEditPet);
-router.post("/getpets", verifyTokenAndRefresh,handleGetPet);
+router.post("/Patient/getPets", verifyTokenAndRefresh,handleGetPet);
 router.post("/deletepet", verifyTokenAndRefresh, handleDeletePet);
 router.post("/addVetDetails", verifyTokenAndRefresh, handleVetClinic);
 router.post("/addBreederDetails", verifyTokenAndRefresh,  handleBreeder);

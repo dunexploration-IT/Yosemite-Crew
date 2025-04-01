@@ -2,7 +2,6 @@ const pet = require('../models/YoshPet');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const {  handleMultipleFileUpload } = require('../middlewares/upload');
-
 async function handleAddPet(req,res){
   const token = req.headers.authorization.split(' ')[1]; // Extract token
   const decoded = jwt.verify(token, process.env.JWT_SECRET); // Verify token
@@ -46,27 +45,59 @@ async function handleAddPet(req,res){
 }
 
 async function handleGetPet(req, res) {
-  const token = req.headers.authorization.split(' ')[1]; // Extract token
-  const decoded = jwt.verify(token, process.env.JWT_SECRET); // Verify token
-  const cognitoUserId = decoded.username; // Get user ID from token
   try {
+    const baseUrl = process.env.BASE_URL;
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ resourceType: 'OperationOutcome', issue: [{ severity: 'error', code: 'invalid', diagnostics: 'Missing token' }] });
 
-      const { limit = 10, offset = 0 } = req.body;
-      const pets = await pet.find({ cognitoUserId })
-          .skip(parseInt(offset))
-          .limit(parseInt(limit));
+    const cognitoUserId = jwt.verify(token, process.env.JWT_SECRET).username;
+    const { limit = 10, offset = 0 } = req.body;
+    const pets = await pet.find({ cognitoUserId }).skip(parseInt(offset)).limit(parseInt(limit));
 
-     // const total = await pet.countDocuments({ cognitoUserId });
+    if (!pets.length) return res.status(200).json({ resourceType: 'Bundle', type: 'searchset', total: 0, entry: [], message: 'No pets found' });
 
-      res.status(200).json({
-          status: 1,
-          data: pets,
-          message: pets.length === 0 ? "No pets found for this user" : "Pets retrieved successfully"
-      });
+    const fhirPets = pets.map(petData => ({
+      resourceType: 'Patient', // Ensure resourceType is top level
+      id: petData._id.toString(),
+      identifier: [{ system: `${baseUrl}/fhir/pet-ids`, value: petData._id.toString() }],
+      name: [{ use: 'official', text: petData.petName }],
+      gender: petData.petGender?.toLowerCase() === 'male' ? 'male' : 'female',
+      birthDate: petData.petdateofBirth,
+      animal: { species: { text: petData.petType }, breed: { text: petData.petBreed } },
+      extension: [
+        { url: `${baseUrl}/fhir/extensions/pet-age`, valueString: petData.petAge,title: "petAge" },
+        { url: `${baseUrl}/fhir/extensions/pet-color`, valueString: petData.petColor,title: "petColor" },
+        { url: `${baseUrl}/fhir/extensions/pet-weight`, valueString: petData.petCurrentWeight,title: "petCurrentWeight" },
+        { url: `${baseUrl}/fhir/extensions/pet-blood-group`, valueString: petData.petBloodGroup,title: "petBloodGroup" },
+        { url: `${baseUrl}/fhir/extensions/is-neutered`, valueString: petData.isNeutered,title: "isNeutered" },
+        { url: `${baseUrl}/fhir/extensions/age-when-neutered`, valueString: petData.ageWhenNeutered,title: "ageWhenNeutered" },
+        { url: `${baseUrl}/fhir/extensions/microchip-number`, valueString: petData.microChipNumber,title: "microChipNumber" },
+        { url: `${baseUrl}/fhir/extensions/is-insured`, valueString: petData.isInsured,title: "isInsured" },
+        { url: `${baseUrl}/fhir/extensions/insurance-company`, valueString: petData.insuranceCompany,title: "insuranceCompany" },
+        { url: `${baseUrl}/fhir/extensions/policy-number`, valueString: petData.policyNumber,title: "policyNumber" },
+        { url: `${baseUrl}/fhir/extensions/passport-number`, valueString: petData.passportNumber,title: "passportNumber" },
+        { url: `${baseUrl}/fhir/extensions/pet-from`, valueString: petData.petFrom,title: "petFrom" },
+        { url: `${baseUrl}/fhir/extensions/pet-image`, valueString: petData.petImage[0],title: "petImage" }
+      ],
+      meta: {
+        created: petData.createdAt,
+        lastUpdated: petData.updatedAt
+      }
+    }));
+
+    res.status(200).json({
+      resourceType: 'Bundle',
+      type: 'searchset',
+      total: fhirPets.length,
+      entry: fhirPets.map(petData => ({
+        resource: petData // `resource` is directly the petData object
+      }))
+    });
   } catch (error) {
-      res.status(500).json({ status: 0, message: "Server error", error: error.message });
+    res.status(500).json({ resourceType: 'OperationOutcome', issue: [{ severity: 'error', code: 'exception', diagnostics: error.message }] });
   }
 }
+
 
 async function handleDeletePet(req,res) {
     const petId = req.body.petId;

@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
 const { connectToDocumentDB } = require('./config/connect');
 const yoshmite = require('./routes/user');
+const fhirRoutes = require('./routes/fhirRoutes');
 const doctorRoutes = require('./routes/addDoctorsRoutes');
 const authRoutes = require('./routes/authRoutes');
 const fhir = require('./routes/authRoutes');
@@ -71,13 +72,14 @@ app.locals.uploadPath = UPLOADS_DIR;
 app.use('/Uploads/Images', express.static(UPLOADS_DIR));
 
 // Routes
-app.use('/api', yoshmite);
+app.use('/fhir', yoshmite);
 app.use('/api/auth', authRoutes);
 app.use('/api/doctors', doctorRoutes);
 app.use('/api/appointments', apointmentRoutes);
 app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/inventory', InventoryRoutes);
-app.use("/fhir",fhir)
+app.use("/fhir",fhir);
+app.use('/fhir/extensions', fhirRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

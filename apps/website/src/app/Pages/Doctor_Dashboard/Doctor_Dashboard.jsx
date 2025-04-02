@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import './Doctor_Dashboard.css';
+import {FHIRSlotService} from "../../utils/FhirMapper";
 import { BoxDiv, DivHeading } from '../Dashboard/page';
 // import box1 from '../../../../public/Images/box1.png';
 // import box7 from '../../../../public/Images/box7.png';
@@ -38,7 +39,7 @@ const Doctor_Dashboard = () => {
   const [profile, setprofile] = useState([]);
   const [status, setStatus] = useState('');
   // const [availabilityTimes, setAvailbilityTimes] = useState(null);
-  // console.log('status', status);
+  console.log('timeSlots ', timeSlots);
   useEffect(() => {
     if (doctorProfile) {
       // console.log('doctorProfile.timeDuration', doctorProfile.timeDuration);
@@ -252,12 +253,19 @@ const Doctor_Dashboard = () => {
   };
 
   const handleSlotes = async () => {
+    
+  const fhirSlotService = new FHIRSlotService(timeSlots);
+
+  // Create FHIR bundle
+  const slotsBundle = fhirSlotService.createBundle(userId);
+
+  console.log("Generated FHIR Slots Bundle:", slotsBundle);
     try {
       console.log('hello');
       const token = sessionStorage.getItem("token");
       const response = await axios.post(
         `${process.env.NX_PUBLIC_VITE_BASE_URL}api/doctors/addDoctorsSlots/${userId}`,
-        { slots: timeSlots, day: Day },{headers:{
+        { slots: slotsBundle, day: Day },{headers:{
           Authorization: `$Bearer ${token}`,
         }}
       );

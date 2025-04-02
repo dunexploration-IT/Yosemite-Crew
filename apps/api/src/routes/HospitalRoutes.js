@@ -37,7 +37,7 @@ router.get('/getCompletedAppointments',verifyTokenAndRefresh, HospitalController
 router.get('/getCanceledAppointments',verifyTokenAndRefresh, HospitalController.getCanceledAppointments);
 router.get('/getUpcomingAppointments',verifyTokenAndRefresh, HospitalController.getUpcomingAppointments);
 router.get('/getDoctorsTotalAppointments',verifyTokenAndRefresh,HospitalController.getDoctorsTotalAppointments)
-router.get('/hospitalDashboard',verifyTokenAndRefresh, HospitalController.hospitalDashboard);
+router.get('/MeasureReport/hospitalDashboard',verifyTokenAndRefresh, HospitalController.hospitalDashboard);
 router.get("/getAppointmentsForHospitalDashboard",verifyTokenAndRefresh,HospitalController.getAppointmentsForHospitalDashboard)
 router.get('/getMessages',verifyTokenAndRefresh,HospitalController.getMessages)
 

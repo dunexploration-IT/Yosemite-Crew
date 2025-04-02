@@ -1,4 +1,4 @@
-// eslint-disable-next-line no-unused-vars
+
 import React, { useCallback, useEffect, useState } from 'react';
 import './Dashboard.css';
 import PropTypes from 'prop-types';
@@ -19,6 +19,7 @@ import axios from 'axios';
 import StackedBarChart from '../Graph/page';
 import { useAuth } from '../../context/useAuth';
 import Swal from 'sweetalert2';
+import {  FHIRParser } from '../../utils/FhirMapper';
 
 const Dashboard = () => {
   const { userId,onLogout } = useAuth();
@@ -38,7 +39,7 @@ const Dashboard = () => {
   const AppointmentGraphOnMonthBase = useCallback(
     async (selectedOption, userId) => {
       const days = parseInt(selectedOption.match(/\d+/)[0], 10);
-      console.log(`Selected Days: ${days}`);
+      // console.log(`Selected Days: ${days}`);
       try {
         const token = sessionStorage.getItem("token");
         const response = await axios.get(
@@ -50,10 +51,13 @@ const Dashboard = () => {
             headers: {Authorization: `Bearer ${token}`},
           }
         );
-        console.log(response.data);
+        // console.log(response.data);
         if (response) {
+         
+          const data = new FHIRParser(JSON.parse(response.data.data)).ConvertToNormalDashboardGraph();
+          console.log("hellooooooooooooooooooooo",data);
           setCancelCompletedGraph(
-            response.data.data.map((v) => ({
+            data.map((v) => ({
               month: v.monthName,
               completed: v.successful,
               cancelled: v.canceled,
@@ -62,7 +66,7 @@ const Dashboard = () => {
         }
       } catch (error) {
         if (error.response && error.response.status === 401) {
-          console.log('Session expired. Redirecting to signin...');
+          // console.log('Session expired. Redirecting to signin...');
           onLogout(navigate);
         }
       }
@@ -74,24 +78,39 @@ const Dashboard = () => {
     try {
       const token = sessionStorage.getItem('token')
       const response = await axios.get(
-        `${process.env.NX_PUBLIC_VITE_BASE_URL}api/hospitals/hospitalDashboard`,
-        { params: { userId } , headers: { Authorization: `Bearer ${token}` } }
+        `${process.env.NX_PUBLIC_VITE_BASE_URL}fhir/v1/MeasureReport/hospitalDashboard`,
+        { params: {
+          subject: `Organization/${userId}`, 
+          reportType: 'HospitalDashboardoverView',
+      } , headers: { Authorization: `Bearer ${token}` } }
       );
       if (response) {
-        setOverview(response.data);
-        console.log('overview', response.data);
+        // console.log('overview',JSON.parse(response.data) );
+        const data = new FHIRParser(JSON.parse(response.data)).overviewConvertToNormal();
+        // console.log("dddddddddddddddddd",data);
+
+        setOverview(data);
+        // console.log('overview', response.data);
       }
     } catch (error) {
       if (error.response && error.response.status === 401) {
-        console.log('Session expired. Redirecting to signin...');
+        // console.log('Session expired. Redirecting to signin...');
         onLogout(navigate);
+      }
+      else if (error.response && error.response.status === 500) {
+        new Swal.fire({
+          type: "error",
+          text: 'Network error',
+          icon: 'error',
+          confirmButtonText: 'OK',
+        })
       }
     }
   }, [userId, onLogout,navigate]);
 
   const getAllAppointments = useCallback(
     async (offset) => {
-      console.log('offset', offset);
+      // console.log('offset', offset);
       try {
         const token = sessionStorage.getItem('token')
         const response = await axios.get(
@@ -100,13 +119,13 @@ const Dashboard = () => {
         `,{headers: { Authorization: `Bearer ${token}`} }
         );
         if (response) {
-          console.log('totalAppointments', response.data.totalAppointments);
+          // console.log('totalAppointments', response.data.totalAppointments);
           setTotalAppointments(response.data.totalAppointments);
           setAllAppointments(response.data.Appointments);
         }
       } catch (error) {
         if (error.response && error.response.status === 401) {
-          console.log('Session expired. Redirecting to signin...');
+          // console.log('Session expired. Redirecting to signin...');
           onLogout(navigate);
         }
       }
@@ -115,7 +134,7 @@ const Dashboard = () => {
   );
 
   const AppointmentActions = async (id, status, offset) => {
-    console.log('iddd', id, status, offset);
+    // console.log('iddd', id, status, offset);
     try {
       const token = sessionStorage.getItem("token");
       const response = await axios.put(
@@ -135,7 +154,7 @@ const Dashboard = () => {
       // getlast7daysAppointMentsCount();
     } catch (error) {
       if (error.response && error.response.status === 401) {
-        console.log('Session expired. Redirecting to signin...');
+        // console.log('Session expired. Redirecting to signin...');
         onLogout(navigate);
       }
       Swal.fire({
@@ -154,7 +173,7 @@ const Dashboard = () => {
     }
   }, [userId, AppointmentGraphOnMonthBase, getOverView, getAllAppointments]);
   const handleChangeAppointmentGraph = (value) => {
-    console.log('selected', value);
+    // console.log('selected', value);
     AppointmentGraphOnMonthBase(value, userId);
   };
 

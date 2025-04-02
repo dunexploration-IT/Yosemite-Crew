@@ -10,7 +10,7 @@ import DynamicSelect from '../../Components/DynamicSelect/DynamicSelect';
 import OperatingHours from '../../Components/OperatingHours/OperatingHours';
 import { Modal, Button } from 'react-bootstrap';
 import Switch from 'react-switch';
-import { MainBtn } from '../Appointment/page';
+// import { MainBtn } from '../Appointment/page';
 // import whtcheck from '../../../../public/Images/whtcheck.png';
 // import { MdOpacity } from 'react-icons/md';
 import axios from 'axios';
@@ -23,7 +23,7 @@ import { FaFileWord } from 'react-icons/fa';
 import { RxCrossCircled } from 'react-icons/rx';
 import { IoIosAddCircle, IoIosArrowDropleft, IoIosArrowDropright } from 'react-icons/io';
 import { useAuth } from '../../context/useAuth';
-import countrycode from '../Add_Department/countriescities.json';
+// import countrycode from '../Add_Department/countriescities.json';
 import IntlTelInput from "react-intl-tel-input";
 import "react-intl-tel-input/dist/main.css";
 import { FaCircleCheck } from "react-icons/fa6";
@@ -34,19 +34,18 @@ const Add_Vet = () => {
   const navigate = useNavigate();
   const [OperatingHour, setOperatingHours] = useState([]);
   const [uploadedfiles, setUploadedFiles] = useState([]);
-  // const [selectedCode, setSelectedCode] = useState('+91');
-  const [phone, setPhone] = useState("");
-  const [searchTerms, setSearchTerms] = useState('');
+  console.log("operating",OperatingHour);
+ 
   const [PersonalInfoForm, setPersonalInfoForm] = useState({
     firstName: '',
     lastName: '',
     gender: '',
     email: '',
-    countrycode: '+91',
+    countrycode: '',
     phone: '',
     dateOfBirth: '',
   });
-  // console.log('PersonalInfoForm.dateOfBirth', PersonalInfoForm.countrycode);
+  console.log('PersonalInfoForm.dateOfBirth', PersonalInfoForm.countrycode,PersonalInfoForm.phone);
 
   const [ResidentialAddressForm, setResidentialAddressForm] = useState({
     addressLine1: '',
@@ -63,8 +62,9 @@ const Add_Vet = () => {
     languagesSpoken: '',
     biography: '',
     document: [],
+    cvFile: '',
   });
-  // console.log(professionalBackground.specialization);
+  console.log("professionalBackground.cvFile",professionalBackground.cvFile);
 
   // const [selectedFile, setSelectedFile] = useState(null);
   const [consultFee, setConsultFee] = useState('');
@@ -82,18 +82,13 @@ const Add_Vet = () => {
   const [options, setOptions] = useState([]);
   const [timeDuration, setTimeDuration] = useState(null);
 
-  // Filter countries based on search input
-  const filteredCountries = countrycode.filter(
-    (country) =>
-      country.countryCode.includes(searchTerms) ||
-      country.label.toLowerCase().includes(searchTerms.toLowerCase())
-  );
+
 
   const handleDateChange = (date) => {
     setPersonalInfoForm((pre) => ({
       ...pre,
       dateOfBirth: date,
-    })); // Update the parent state with the selected date
+    })); 
   };
 
   const getSpecilization = useCallback(async () => {
@@ -158,7 +153,7 @@ const Add_Vet = () => {
       document: prev.document.filter((_, fileIndex) => fileIndex !== index),
     }));
   };
-  // console.log("professionalBackground", professionalBackground);
+  
 
   useEffect(() => {
     getSpecilization();
@@ -179,7 +174,7 @@ const Add_Vet = () => {
     }));
   };
 
-  // Handle residential address input change
+  
   const handleAddressInputChange = (e) => {
     const { name, value } = e.target;
     setResidentialAddressForm((prevData) => ({
@@ -188,7 +183,7 @@ const Add_Vet = () => {
     }));
   };
 
-  // Handle personal information form input change
+  
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setPersonalInfoForm((prevData) => ({
@@ -197,7 +192,6 @@ const Add_Vet = () => {
     }));
   };
 
-  // Handle personal info click action
   const handleClick = (field, value) => {
     setPersonalInfoForm((prevData) => ({
       ...prevData,
@@ -205,7 +199,6 @@ const Add_Vet = () => {
     }));
   };
 
-  // Profile image upload handler
   const [image, setImage] = useState(null);
   const handleImageChange = (e) => {
     const file = e.target.files[0];
@@ -214,7 +207,7 @@ const Add_Vet = () => {
     }
   };
 
-  // Toggle handlers
+
   const [isToggled, setIsToggled] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -229,10 +222,8 @@ const Add_Vet = () => {
     setIsModalOpen(false);
   };
 
-  // Operating hours handler
   const handleSaveOperatingHours = (updatedHours) => {
     setOperatingHours(updatedHours);
-    // console.log('Received operating hours:', updatedHours);
   };
 
   // Consultation mode handling
@@ -265,7 +256,7 @@ const Add_Vet = () => {
     }));
   };
 
-  // Handle switch toggle changes for authorization settings
+  
   const handleSwitchChange = (e) => {
     const { id, checked } = e.target;
     setAuthSettings((prevSettings) => ({
@@ -274,13 +265,13 @@ const Add_Vet = () => {
     }));
   };
 
-  // Select options
+
   const handleDynamicChange = (value) => {
     setTimeDuration(value);
   };
 
   const HandleSubmit = async () => {
-    // 1. Validate input data
+    // ✅ 1. Validate input data
     if (
       !PersonalInfoForm.firstName ||
       !PersonalInfoForm.lastName ||
@@ -288,123 +279,290 @@ const Add_Vet = () => {
       !PersonalInfoForm.phone
     ) {
       Swal.fire({
-        icon: 'error',
-        title: 'Missing Information',
-        text: 'Please fill in all required personal information fields.',
+        icon: "error",
+        title: "Missing Information",
+        text: "Please fill in all required personal information fields.",
       });
       return;
     }
-
+  
     if (CreateLogin.password !== CreateLogin.confirmPassword) {
       Swal.fire({
-        icon: 'error',
-        title: 'Password Mismatch',
-        text: 'Passwords do not match.',
+        icon: "error",
+        title: "Password Mismatch",
+        text: "Passwords do not match.",
       });
       return;
     }
-
+  
     if (!CreateLogin.username) {
       Swal.fire({
-        icon: 'error',
-        title: 'Username Required',
-        text: 'Please provide a username.',
+        icon: "error",
+        title: "Username Required",
+        text: "Please provide a username.",
       });
       return;
     }
 
     const formData = new FormData();
 
+    if (image) {
+      formData.append("profilePicture", image);
+    }
+
+    if (professionalBackground.cvFile) {
+      formData.append("cvFile", professionalBackground.cvFile);
+    }
+   
     professionalBackground.document.forEach((file) => {
       formData.append('document', file);
     });
-    if (image) {
-      formData.append('image', image);
-    }
-
-    formData.append(
-      'formData',
-      JSON.stringify({
-        personalInfo: PersonalInfoForm,
-        residentialAddress: ResidentialAddressForm,
-        professionalBackground: professionalBackground,
-        availability: OperatingHour,
-        activeModes: activeModes,
-        consultFee: consultFee,
-        loginCredentials: CreateLogin,
-        authSettings: authSettings,
-        timeDuration: timeDuration,
-        bussinessId: userId,
-      })
-    );
-    const token = sessionStorage.getItem('token');
-
-    try {
-      const response = await fetch(
-        `${process.env.NX_PUBLIC_VITE_BASE_URL}api/doctors/add-doctors`,
+  
+ 
+    const timeDurationExtension = {
+      url: "http://example.org/fhir/StructureDefinition/timeDuration",
+      valueDuration: {
+        value: timeDuration,
+        unit: "minutes",
+        system: "http://unitsofmeasure.org",
+        code: "min",
+      },
+    };
+    
+    const mapToFHIRAvailableTime = (operatingHours) => {
+      const daysOfWeekMap = {
+        Monday: "mon",
+        Tuesday: "tue",
+        Wednesday: "wed",
+        Thursday: "thu",
+        Friday: "fri",
+        Saturday: "sat",
+        Sunday: "sun",
+      };
+    
+      return operatingHours
+        .filter((day) => day.checked) // Only include checked days
+        .map((day) => ({
+          daysOfWeek: [daysOfWeekMap[day.day]],
+          availableStartTime: formatTime(day.times[0].from),
+          availableEndTime: formatTime(day.times[0].to),
+        }));
+    };
+    
+    // ⏰ Helper function to format time to HH:mm:ss
+    const formatTime = (time) => {
+      let hour = parseInt(time.hour);
+      if (time.period === "PM" && hour !== 12) hour += 12;
+      if (time.period === "AM" && hour === 12) hour = 0;
+      return `${String(hour).padStart(2, "0")}:${time.minute}:00`;
+    };
+   
+    const practitionerResource = {
+      resourceType: "Practitioner",
+      name: [
         {
-          method: 'POST',
-          body: formData,
-          headers: {
-            Authorization: `Bearer ${token}`, // Attach the token to the request headers
+          family: PersonalInfoForm.lastName,
+          given: [PersonalInfoForm.firstName],
+        },
+      ],
+      telecom: [
+        {
+          system: "phone",
+          value: `${PersonalInfoForm.countrycode}${PersonalInfoForm.phone}`,
+          use: "mobile",
+        },
+        {
+          system: "email",
+          value: PersonalInfoForm.email,
+        },
+      ],
+      gender: PersonalInfoForm.gender.toLowerCase(),
+      birthDate: PersonalInfoForm.dateOfBirth,
+      qualification: [
+        {
+          code: {
+            text: professionalBackground.qualification,
+          },
+          identifier: [
+            {
+              system: "https://www.medicallicense.com",
+              value: professionalBackground.medicalLicenseNumber,
+            },
+          ],
+          period: {
+            start: "2020-01-01", // Dummy start date
+          },
+          issuer: {
+            display: "Medical Council",
           },
         },
-        
-      );
+      ],
+      communication: [
+        {
+          language: {
+            text: professionalBackground.languagesSpoken,
+          },
+        },
+      ],
+      extension: [
+        {
+          url: "http://example.org/fhir/StructureDefinition/practitioner-biography",
+          valueString: professionalBackground.biography,
+        },
+        {
+         
+          url: "http://example.org/fhir/StructureDefinition/yearsOfExperience",
+          valueInteger: parseInt(professionalBackground.yearsOfExperience, 10),
+        },
+      ],
+    };
+    
+    
+   const practitionerRoleResource = {
+    resourceType: "PractitionerRole",
+    practitioner: {
+      reference: "Practitioner/1",
+    },
+    code: [
+      {
+        coding: [
+          {
+            system: "http://example.org/fhir/CodeSystem/specialization",
+            code: professionalBackground.specialization, 
+            display: professionalBackground.specialization,
+          },
+        ],
+        text: professionalBackground.specialization,
+      },
+    ],
+    availableTime: mapToFHIRAvailableTime(OperatingHour),
+    extension: [
+      {
+        url: "http://example.org/fhir/StructureDefinition/consultFee",
+        valueDecimal: parseFloat(consultFee),
+      },
+      timeDurationExtension, 
+      {
+      
+        url: "http://example.org/fhir/StructureDefinition/activeModes",
+        valueCodeableConcept: activeModes.map((mode) => ({
+          coding: [
+            {
+              system: "http://terminology.hl7.org/CodeSystem/service-mode",
+              code: mode.replace(/\s/g, "-").toLowerCase(),
+              display: mode,
+            },
+          ],
+        })),
+      },
+    ],
+  };
+  
+    
+  
+  
+    const locationResource = {
+      resourceType: "Location",
+      address: {
+        line: [ResidentialAddressForm.addressLine1],
+        city: ResidentialAddressForm.city,
+        state: ResidentialAddressForm.stateProvince,
+        postalCode: ResidentialAddressForm.zipCode,
+        country: ResidentialAddressForm.country,
+      },
+    };
+  
 
+    const basicAuthResource = {
+      resourceType: "Basic",
+      code: {
+        text: "Authentication",
+      },
+      subject: {
+        reference: "Practitioner/1",
+      },
+      author: {
+        display: CreateLogin.username,
+      },
+      extension: [
+        {
+          url: "http://example.org/fhir/StructureDefinition/password",
+          valueString: CreateLogin.password,
+        },
+      ],
+    };
+  
+
+    const consentResource = {
+      resourceType: "Consent",
+      status: "active",
+      scope: {
+        text: "Healthcare Data Access",
+      },
+      category: [
+        {
+          text: "Permissions",
+        },
+      ],
+      policy: Object.keys(authSettings).map((key) => ({
+        authority: `http://example.org/permissions/${key}`,
+        uri: authSettings[key] ? "granted" : "denied",
+      })),
+    };
+  
+
+    const bundleResource = {
+      resourceType: "Bundle",
+      type: "transaction",
+      "identifier": {
+    "system": "http://example.org/fhir/identifier/userId",
+    "value": userId 
+  },
+      entry: [
+        // { resource: patientResource },
+        { resource: practitionerResource },
+        { resource: practitionerRoleResource },
+        { resource: locationResource },
+        { resource: basicAuthResource },
+        { resource: consentResource },
+      ],
+    };
+  
+    formData.append("fhirBundle", JSON.stringify(bundleResource));
+
+    console.log("bundleResource",JSON.stringify(bundleResource));
+  
+    // -------------------------------------------
+    // 🚀 4. Submit FormData to Backend
+    // -------------------------------------------
+    const token = sessionStorage.getItem("token");
+  
+    try {
+      const response = await fetch(
+        `${process.env.NX_PUBLIC_VITE_BASE_URL}fhir/v1/Practitioner`,
+        {
+          method: "POST",
+          body: formData,
+          headers: {
+            Authorization: `Bearer ${token}`, // Attach token for authentication
+          },
+        }
+      );
+  
       if (response.ok) {
         Swal.fire({
           icon: 'success',
           title: 'Success',
-          text: 'Form submitted successfully!',
+          text: 'Doctor added successfully!',
         });
         navigate('/addoctor');
-        // Reset forms and other states
-        // setPersonalInfoForm({
-        //   firstName: "",
-        //   lastName: "",
-        //   gender: "",
-        //   email: "",
-        //   phone: "",
-        //   image: "",
-        // });
-        // setResidentialAddressForm({
-        //   addressLine1: "",
-        //   city: "",
-        //   stateProvince: "",
-        //   country: "",
-        //   zipCode: "",
-        // });
-        // setProfessionalBackground({
-        //   specialization: "",
-        //   qualification: "",
-        //   medicalLicenseNumber: "",
-        //   yearsOfExperience: "",
-        //   languagesSpoken: "",
-        //   biography: "",
-        //   image: "",
-        // });
-        // setCreateLogin({
-        //   username: "",
-        //   password: "",const [uploadedfiles, setUploadedFiles] = useState([]);
-        // });
-        // setAuthSettings({
-        //   takeAssessments: false,
-        //   appointments: false,
-        //   viewMedicalRecords: false,
-        //   prescribeMedications: false,
-        // });
       } else {
         const errorData = await response.json();
-        if (error.response && error.response.status === 401) {
-          console.log('Session expired. Redirecting to signin...');
-          onLogout(navigate);
-        }
         Swal.fire({
           icon: 'error',
           title: 'Submission Failed',
           text:
-            errorData.message ||
+            errorData.issue?.[0]?.details?.text ||
             'An error occurred while submitting the form. Please try again.',
         });
       }
@@ -417,6 +575,8 @@ const Add_Vet = () => {
       console.error('Submission Error:', error);
     }
   };
+  
+  
   const duration = [
     { value: '15', label: '15 mins' },
     { value: '30', label: '30 mins' },
@@ -560,19 +720,26 @@ const Add_Vet = () => {
                           <Col md={3}>
                             <div className="InputCountry">
 
-                              <IntlTelInput
-                                preferredCountries={["in", "us"]}
-                                defaultCountry="in"
-                                separateDialCode={true}
-                                containerClassName="intl-tel-input"
-                                inputClassName="form-control"
-                                value={phone}
-                                onPhoneNumberChange={(isValid, value, countryData) => {
-                                  console.log("Phone:", value);
-                                  console.log("Country Data:", countryData);
-                                  setPhone(value);
-                                }}
-                              />
+                            <IntlTelInput
+  preferredCountries={["in", "us"]}
+  defaultCountry="in"
+  separateDialCode={true}
+  containerClassName="intl-tel-input"
+  inputClassName="form-control"
+  value={PersonalInfoForm.phone} // Keep phone value unchanged
+  onPhoneNumberBlur={(isValid, value, countryData) => {
+    console.log("Selected Country Code:", `+${countryData.dialCode}`);
+
+    // Update only the country code
+    setPersonalInfoForm((pre) => ({
+      ...pre,
+      countrycode: `+${countryData.dialCode}`, // Update country code only
+    }));
+  }}
+/>
+
+
+
 
 
 
@@ -766,13 +933,30 @@ const Add_Vet = () => {
                         </Row>
                         <Row>
                           <Col md={12}>
-                            <Form.Group controlId="formFile" className="CvUplodeDiv">
-                              <Form.Control type="file" />
+                          <Form.Group controlId="formFile" className="CvUplodeDiv">
+                              <Form.Control
+                                type="file"
+                                
+                                onChange={(e) => {
+                                  const file = e.target.files[0];
+                                  if (file) {
+                                    setProfessionalBackground({
+                                      ...professionalBackground,
+                                      cvFile: file, // Store the file object, not the value
+                                    });
+                                  }
+                                }}
+                              />
                               <div className="CvLabel">
-                                <p>Upload CV / Resume (optional)</p>
+                                <p>
+                                  {professionalBackground.cvFile
+                                    ? professionalBackground.cvFile.name
+                                    : "Upload CV / Resume (optional)"}
+                                </p>
                                 <MdCloudUpload />
                               </div>
                             </Form.Group>
+
                           </Col>
                         </Row>
 

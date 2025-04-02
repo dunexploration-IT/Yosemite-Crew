@@ -14,6 +14,8 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { propTypes } from 'react-bootstrap/esm/Image';
 import { useAuth } from '../../context/useAuth';
+import { FHIRParser } from '../../utils/FhirMapper';
+import Swal from 'sweetalert2';
 
 const useDebounce = (value, delay) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -35,7 +37,7 @@ const Add_Doctor = () => {
   const [doctorsData, setDoctorsData] = useState({});
   const [overview, setOverview] = useState([]);
   const [search, setSearch] = useState('');
-  console.log('doctorsData', doctorsData);
+  // console.log('doctorsData', doctorsData);
 
   const debouncedSearch = useDebounce(search, 500);
   const getaDoctors = useCallback(async () => {
@@ -44,47 +46,182 @@ const Add_Doctor = () => {
       const token = sessionStorage.getItem('token');
 
       const response = await axios.get(
-        `${process.env.NX_PUBLIC_VITE_BASE_URL}api/doctors/searchDoctorsByName?name=${debouncedSearch}&bussinessId=${userId}`,
+        `${process.env.NX_PUBLIC_VITE_BASE_URL}fhir/v1/Practitioner?name=${debouncedSearch}&bussinessId=${userId}`,
         {
           headers: {
-            Authorization: `Bearer ${token}`, // Attach the token to the request headers
+            Authorization: `Bearer ${token}`,
           },
         }
       );
 
       if (response.status === 200) {
-        setDoctorsData(response.data);
+        // console.log('response', response.data);
+
+        let parsedData =
+          typeof response.data === 'string'
+            ? JSON.parse(response.data)
+            : response.data;
+
+        const parser = new FHIRParser(parsedData);
+        // console.log('parser', parser);
+
+        const normalData = parser.convertToNormal();
+        // console.log('Converted Normal Data:', normalData);
+
+        setDoctorsData(normalData);
       } else {
-        console.log('No data found');
+       new Swal({
+          title: 'Error',
+          text: 'Failed to fetch doctors data.',
+          icon: 'error',
+          buttons: 'OK',
+        
+       })
       }
     } catch (error) {
       console.error('Error fetching doctors data:', error);
 
-      // If the session is expired or token is invalid (401 Unauthorized)
-      if (error.response && error.response.status === 401) {
-        console.log('Session expired. Redirecting to signin...');
-        onLogout(navigate);
+      // Handle error with swal for different scenarios
+      if (error.response) {
+        const { status, data } = error.response;
+
+        // Handle specific status codes with swal
+        if (status === 401) {
+          new Swal({
+            title: 'Session Expired',
+            text: 'Your session has expired. Please log in again.',
+            icon: 'error',
+            buttons: 'OK',
+          }).then(() => {
+            onLogout(navigate); // Redirect to signin
+          });
+        } else if (status === 404) {
+          new Swal({
+            title: 'Not Found',
+            text: 'Doctors data not found.',
+            icon: 'error',
+            buttons: 'OK',
+          });
+        } else if (status === 500) {
+          new Swal({
+            title: 'Server Error',
+            text: 'Internal server error while fetching doctors data.',
+            icon: 'error',
+            buttons: 'OK',
+          });
+        } else {
+          new Swal({
+            title: 'Error',
+            text: `An error occurred: ${data?.message || 'Unknown error'}`,
+            icon: 'error',
+            buttons: 'OK',
+          });
+        }
+
+        // Optionally, handle FHIR-specific errors in the response (if the server returns an OperationOutcome)
+        if (data && data.resourceType === 'OperationOutcome') {
+          new Swal({
+            title: 'FHIR Error',
+            text: data.issue[0]?.details?.text || 'Unknown FHIR error',
+            icon: 'error',
+            buttons: 'OK',
+          });
+        }
+      } else if (error.request) {
+        // Network error (no response received)
+        new Swal({
+          title: 'Network Error',
+          text: 'No response was received from the server. Please check your network connection.',
+          icon: 'error',
+          buttons: 'OK',
+        });
+      } else {
+        // Any other error
+        new Swal({
+          title: 'Error',
+          text: `Error: ${error.message}`,
+          icon: 'error',
+          buttons: 'OK',
+        });
       }
     }
-  },[userId, navigate, onLogout, debouncedSearch]);
+  }, [userId, navigate, onLogout, debouncedSearch]);
 
   const getOverview = useCallback(async () => {
     try {
       const response = await axios.get(
-        `${process.env.NX_PUBLIC_VITE_BASE_URL}api/doctors/getOverview`, {params: {userId}}
+        `${process.env.NX_PUBLIC_VITE_BASE_URL}fhir/v1/MeasureReport`,
+        {
+          params: {
+            subject: `Organization/${userId}`,
+            reportType: 'summary',
+          },
+        }
       );
       if (response) {
-        setOverview(response.data);
-        console.log('overview', response.data);
+        const data = new FHIRParser(JSON.parse(response.data));
+        // console.log('overviewData', data);
+        const normalData = data.overviewConvertToNormal();
+        setOverview(normalData);
+        // console.log('overview', normalData);
       }
     } catch (error) {
-      console.error('Error fetching overview:', error);
+      if (error.response) {
+        const { status, data } = error.response;
+        if (status === 401) {
+          onLogout(navigate);
+        } else if (status === 404) {
+          new Swal({
+            title: 'Not Found',
+            text: 'MeasureReport not found.',
+            icon: 'error',
+            buttons: 'OK',
+          });
+        } else if (status === 500) {
+          new Swal({
+            title: 'Server Error',
+            text: 'Internal server error while fetching MeasureReport data.',
+            icon: 'error',
+            buttons: 'OK',
+          });
+        } else {
+          new Swal({
+            title: 'Error',
+            text: `An error occurred: ${data?.message || 'Unknown error'}`,
+            icon: 'error',
+            buttons: 'OK',
+          });
+        }
+
+        if (data && data.resourceType === 'OperationOutcome') {
+          new Swal({
+            title: 'FHIR Error',
+            text: data.issue[0]?.details?.text || 'Unknown FHIR error',
+            icon: 'error',
+            buttons: 'OK',
+          });
+        }
+      } else if (error.request) {
+        new Swal({
+          title: ' Network Error',
+          text: 'No response was received from the server. Please check your network connection.',
+          icon: 'error',
+          buttons: 'OK',
+        });
+      } else {
+        new Swal({
+          title: 'Error',
+          text: `Error: ${error.message}`,
+          icon: 'error',
+          buttons: 'OK',
+        });
+      }
     }
-  },[userId]);
+  }, [userId, navigate, onLogout]);
   useEffect(() => {
     getaDoctors();
     getOverview();
-  }, [debouncedSearch, userId,getOverview,getaDoctors]);
+  }, [debouncedSearch, userId, getOverview, getaDoctors]);
 
   const handleSearch = (e) => {
     setSearch(e.target.value);

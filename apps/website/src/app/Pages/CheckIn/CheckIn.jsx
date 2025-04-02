@@ -17,7 +17,7 @@ import { BoxDiv, DivHeading } from '../Dashboard/page';
 
 // import box5 from '../../../../public/Images/box5.png';
 // import box6 from '../../../../public/Images/box6.png';
-
+import {FHIRMapper,FHIRToSlotConverter} from "../../utils/FhirMapper";
 import { Forminput } from '../SignUp/SignUp';
 import { Col, Row } from 'react-bootstrap';
 import DynamicSelect from '../../Components/DynamicSelect/DynamicSelect';
@@ -57,6 +57,7 @@ function CheckInModal(props) {
     Time: '',
     timeSlots: [],
   });
+  console.log("hhhhhhhhhhhhhhhhhhhh",AllData.Time,AllData.timeSlots);
   useEffect(() => {
     setAllData((prev) => ({
       ...prev,
@@ -216,7 +217,7 @@ function CheckInModal(props) {
     try {
       const token = sessionStorage.getItem("token");  
       const { data } = await axios.get(
-        `${process.env.NX_PUBLIC_VITE_BASE_URL}api/appointments/getslots`,
+        `${process.env.NX_PUBLIC_VITE_BASE_URL}fhir/v1/schedule`,
         {
           params: {
             doctorId: AllData.veterinarian,
@@ -228,7 +229,15 @@ function CheckInModal(props) {
       );
       console.log('data', data);
       if (data?.timeSlots) {
-        setAvailableSlots(data.timeSlots);
+        console.log("//////////", data?.timeSlots);
+        const convertedSlots = data.timeSlots.entry
+          .filter((slot) => slot.resource.resourceType === "Slot") // Filter only Slot resources
+          .map((slot) => {
+            const slotConverter = new FHIRToSlotConverter(slot.resource);
+            return slotConverter.convert();
+          });
+      console.log("convertedSlots", convertedSlots);
+        setAvailableSlots(convertedSlots);      
       } else {
         console.log('hello');
         setAvailableSlots([]);
@@ -276,52 +285,87 @@ function CheckInModal(props) {
   const handleSave = async () => {
     // console.log('AllData', AllData);
     if (!validateFields()) return;
+    const fhirMapper = new FHIRMapper(AllData);
+    const fhirData = fhirMapper.toFHIR();
+    console.log("FHIR Data:", fhirData);
     try {
       const token = sessionStorage.getItem("token");
       const response = await axios.post(
-        `${process.env.NX_PUBLIC_VITE_BASE_URL}api/appointments/webappointment`,
-        AllData,{headers:{Authorization:`Bearer ${token}`}}
+        `${process.env.NX_PUBLIC_VITE_BASE_URL}fhir/v1/Appointment`,
+        fhirData,{headers:{Authorization:`Bearer ${token}`}}
       );
 
       if (response.status === 200) {
-        // Success alert
+        // ✅ Success alert
         Swal.fire({
-          icon: 'success',
-          title: 'Appointment Created Successfully!',
-          text: 'Your appointment has been booked.',
+          icon: "success",
+          title: "Appointment Created Successfully!",
+          text: "Your appointment has been booked.",
+        });
+    
+        // ✅ Reset form data
+        setAllData({
+          ownerName: "",
+          phone: "",
+          addressline1: "",
+          street: "",
+          city: "",
+          state: "",
+          zipCode: "",
+          petName: "",
+          petAge: "",
+          breed: "",
+          purposeOfVisit: "",
+          department: "",
+          appointmentType: "",
+          veterinarian: "",
+          appointmentDate: "",
+        });
+    
+    
+        props.onHide();
+      }
+    } catch (error) {
+      if (error.response) {
+        const errorData = error.response.data;
+    
+    
+        if (
+          errorData.resourceType === "OperationOutcome" &&
+          errorData.issue &&
+          errorData.issue.length > 0
+        ) {
+          const errorMessage =
+            errorData.issue[0]?.details?.text || "An error occurred.";
+          
+          Swal.fire({
+            icon: "error",
+            title: "Error!",
+            text: errorMessage,
+          });
+        } else {
+      
+          Swal.fire({
+            icon: "error",
+            title: "Something went wrong!",
+            text: "There was an issue creating the appointment. Please try again.",
+          });
+        }
+    
+       
+        if (error.response.status === 401) {
+          console.log("Session expired. Redirecting to signin...");
+          onLogout(navigate); 
+        }
+      } else {
+      
+        Swal.fire({
+          icon: "error",
+          title: "Network Error!",
+          text: "Unable to connect to the server. Please check your internet connection and try again.",
         });
       }
-      setAllData({
-        ownerName: '',
-        phone: '',
-        addressline1: '',
-        street: '',
-        city: '',
-        state: '',
-        zipCode: '',
-        petName: '',
-        petAge: '',
-        breed: '',
-        purposeOfVisit: '',
-        department: '',
-        appointmentType: '',
-        veterinarian: '',
-        appointmentDate: '',
-      });
-      props.onHide();
-    } catch (error) {
-      if (error.response && error.response.status === 401) {
-        console.log('Session expired. Redirecting to signin...');
-        onLogout(navigate);
-      }
-      Swal.fire({
-        icon: 'error',
-        title: 'Something went wrong!',
-        text: 'There was an issue creating the appointment. Please try again.',
-      });
-      
-    }
-  };
+    }}
 
   return (
     <div className="CheckInModalSec">

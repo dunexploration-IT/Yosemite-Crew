@@ -9,6 +9,8 @@ import {
   SignUpCommand,
   AdminUpdateUserAttributesCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import FHIRConverter from '../utils/DoctorsHandler';
+import { validateFHIR } from '../Fhirvalidator/FhirValidator';
 // import { equal } from 'assert';
 const AWS = require('aws-sdk');
 const SES = new AWS.SES();
@@ -61,7 +63,195 @@ function convertTo24HourFormat(time) {
 const AddDoctorsController = {
   addDoctor: async (req, res) => {
     try {
-      const formData = req.body.formData ? JSON.parse(req.body.formData) : {};
+      console.log('file', req.files);
+      const formData = req.body.fhirBundle
+        ? JSON.parse(req.body.fhirBundle)
+        : {};
+
+      console.log('formData:', JSON.stringify(formData, null, 2));
+
+      // 🛑 Check if 'entry' exists and is an array before using forEach
+      if (!formData.entry || !Array.isArray(formData.entry)) {
+        console.error("Invalid FHIR Bundle format. No 'entry' array found.");
+        return res.status(400).json({
+          error: "Invalid FHIR Bundle format. No 'entry' array found.",
+        });
+      }
+
+      const parsedData = {
+        personalInfo: {},
+        residentialAddress: {},
+        professionalBackground: {},
+        availability: [],
+        consultFee: 0,
+        loginCredentials: {},
+        authSettings: {},
+        timeDuration: null,
+        bussinessId: formData.identifier?.value || '', // Assuming `userId` comes from auth middleware
+      };
+
+      // 📚 Loop through FHIR Bundle and map to appropriate fields
+      formData.entry.forEach((entry) => {
+        const resource = entry.resource;
+
+        switch (resource.resourceType) {
+          case 'Practitioner':
+            parsedData.personalInfo = {
+              firstName: resource.name[0]?.given?.[0] || '',
+              lastName: resource.name[0]?.family || '',
+              email:
+                resource.telecom?.find((t) => t.system === 'email')?.value ||
+                '',
+              phone:
+                resource.telecom?.find((t) => t.system === 'phone')?.value ||
+                '',
+              gender: resource.gender || '',
+              dateOfBirth: resource.birthDate || '',
+            };
+            parsedData.professionalBackground = {
+              firstName: resource.name[0]?.given?.[0] || '',
+              lastName: resource.name[0]?.family || '',
+              email:
+                resource.telecom?.find((t) => t.system === 'email')?.value ||
+                '',
+              phone:
+                resource.telecom?.find((t) => t.system === 'phone')?.value ||
+                '',
+              gender: resource.gender || '',
+              dateOfBirth: resource.birthDate || '',
+              qualification: resource.qualification?.[0]?.code?.text || '',
+              medicalLicenseNumber:
+                resource.qualification?.[0]?.identifier?.[0]?.value || '',
+              languagesSpoken:
+                resource.communication?.[0]?.language?.text || '',
+              biography:
+                resource.extension?.find(
+                  (ext) =>
+                    ext.url ===
+                    'http://example.org/fhir/StructureDefinition/practitioner-biography'
+                )?.valueString || '',
+              yearsOfExperience:
+                resource.extension?.find(
+                  (ext) =>
+                    ext.url ===
+                    'http://example.org/fhir/StructureDefinition/yearsOfExperience'
+                )?.valueInteger || '',
+            };
+            break;
+          case 'PractitionerRole':
+            parsedData.availability = resource.availableTime.map((slot) => {
+              // Convert FHIR Day to Schema Day
+              const fhirDayToSchemaDay = {
+                mon: 'Monday',
+                tue: 'Tuesday',
+                wed: 'Wednesday',
+                thu: 'Thursday',
+                fri: 'Friday',
+                sat: 'Saturday',
+                sun: 'Sunday',
+              };
+
+              // Split start time & end time
+              const parseTime = (timeString) => {
+                const [hour, minute] = timeString.split(':');
+                const hourInt = parseInt(hour, 10);
+                const period = hourInt >= 12 ? 'PM' : 'AM';
+                const formattedHour =
+                  hourInt > 12 ? (hourInt - 12).toString() : hourInt.toString();
+                return {
+                  hour: formattedHour.padStart(2, '0'),
+                  minute: minute,
+                  period: period,
+                };
+              };
+
+              // Create the availability object
+              return {
+                day: fhirDayToSchemaDay[slot.daysOfWeek[0]] || 'Monday',
+                times: [
+                  {
+                    from: parseTime(slot.availableStartTime),
+                    to: parseTime(slot.availableEndTime),
+                  },
+                ],
+              };
+            });
+
+            parsedData.consultFee =
+              resource.extension?.find(
+                (ext) =>
+                  ext.url ===
+                  'http://example.org/fhir/StructureDefinition/consultFee'
+              )?.valueDecimal || 0;
+
+            var timeDurationExtension = resource.extension?.find(
+              (ext) =>
+                ext.url ===
+                'http://example.org/fhir/StructureDefinition/timeDuration'
+            );
+            parsedData.timeDuration = timeDurationExtension
+              ? {
+                  value: timeDurationExtension?.valueDuration?.value || 0,
+                  unit: timeDurationExtension?.valueDuration?.unit || 'minutes',
+                }
+              : null;
+
+            var activeModesExtension = resource.extension?.find(
+              (ext) =>
+                ext.url ===
+                'http://example.org/fhir/StructureDefinition/activeModes'
+            );
+
+            parsedData.activeModes = activeModesExtension?.valueCodeableConcept
+              ? activeModesExtension.valueCodeableConcept.map(
+                  (concept) => concept.coding[0].display
+                )
+              : ['In-person'];
+
+            var specializationCoding = resource.code?.[0]?.coding?.[0];
+            parsedData.professionalBackground.specialization =
+              specializationCoding?.display || 'General';
+            parsedData.professionalBackground.specializationId =
+              specializationCoding?.code || 'GEN001';
+            break;
+
+          case 'Location':
+            parsedData.residentialAddress = {
+              addressLine1: resource.address?.line?.[0] || 'NA',
+              city: resource.address?.city || 'NA',
+              stateProvince: resource.address?.state || 'NA',
+              zipCode: resource.address?.postalCode || '',
+              country: resource.address?.country || '',
+            };
+            break;
+
+          case 'Basic':
+            parsedData.loginCredentials = {
+              username: resource.author?.display || '',
+              password:
+                resource.extension?.find(
+                  (ext) =>
+                    ext.url ===
+                    'http://example.org/fhir/StructureDefinition/password'
+                )?.valueString || '',
+            };
+            break;
+
+          case 'Consent':
+            parsedData.authSettings = resource.policy.reduce((acc, policy) => {
+              const permissionType = policy.authority.split('/').pop();
+              acc[permissionType] = policy.uri === 'granted';
+              return acc;
+            }, {});
+            break;
+
+          default:
+            console.log(`Unknown Resource Type: ${resource.resourceType}`);
+        }
+      });
+
+      console.log('Parsed Data:', JSON.stringify(parsedData, null, 2));
+
       const {
         personalInfo,
         residentialAddress,
@@ -69,11 +259,11 @@ const AddDoctorsController = {
         availability,
         consultFee,
         loginCredentials,
-        activeModes,
         authSettings,
         timeDuration,
         bussinessId,
-      } = formData;
+        activeModes,
+      } = parsedData;
 
       if (!loginCredentials?.username || !loginCredentials?.password) {
         return res
@@ -85,7 +275,6 @@ const AddDoctorsController = {
       const clientId = process.env.COGNITO_CLIENT_ID_WEB;
       const username = loginCredentials.username;
 
-      // Check if user exists in Cognito
       let userExists = false;
       try {
         await cognito.send(
@@ -110,7 +299,6 @@ const AddDoctorsController = {
           .json({ message: 'User already exists. Please login.' });
       }
 
-      // Register user in Cognito
       const signUpParams = {
         ClientId: clientId,
         Username: username,
@@ -133,7 +321,6 @@ const AddDoctorsController = {
           .json({ message: 'Error registering user. Please try again later.' });
       }
 
-      // Verify email in Cognito
       try {
         await cognito.send(
           new AdminUpdateUserAttributesCommand({
@@ -206,10 +393,19 @@ const AddDoctorsController = {
       };
 
       let image,
+        cvFile,
         documents = [];
 
-      if (req.files && req.files.image) {
-        image = await uploadToS3(req.files.image, 'images');
+      if (req.files && req.files.profilePicture) {
+        image = await uploadToS3(req.files.profilePicture, 'profilePicture');
+      }
+      if (req.files && req.files.cvFile) {
+        const files = await uploadToS3(req.files.cvFile, 'cv');
+        cvFile = {
+          name: files,
+          type: req.files.cvFile.mimetype,
+          date: new Date(),
+        };
       }
       if (req.files && req.files.document) {
         const documentFiles = Array.isArray(req.files.document)
@@ -231,40 +427,84 @@ const AddDoctorsController = {
         userId: data.UserSub,
         personalInfo: { ...personalInfo, image },
         residentialAddress,
-        professionalBackground,
+        professionalBackground: {
+          ...professionalBackground,
+          specialization: parsedData.professionalBackground.specialization,
+          specializationId: parsedData.professionalBackground.specializationId,
+        },
         availability,
-        timeDuration,
+        timeDuration: timeDuration.value,
         consultFee,
-        activeModes,
         authSettings,
         documents: documents,
         bussinessId,
+        activeModes,
+        cvFile,
       });
 
       const savedDoctor = await newDoctor.save();
 
-      // Respond with success
       res.status(201).json({
-        message: 'Doctor added successfully',
+        resourceType: 'OperationOutcome',
+        issue: [
+          {
+            severity: 'information',
+            code: 'informational',
+            details: {
+              text: 'Doctor added successfully',
+            },
+          },
+        ],
         doctor: savedDoctor,
       });
     } catch (error) {
       console.error('Error saving doctor:', error);
-      res
-        .status(500)
-        .json({ message: 'Internal server error', error: error.message });
+      res.status(500).json({
+        resourceType: 'OperationOutcome',
+        issue: [
+          {
+            severity: 'error',
+            code: 'exception',
+            details: {
+              text: error.message,
+            },
+          },
+        ],
+      });
     }
   },
 
   getOverview: async (req, res) => {
-    const { userId } = req.query;
-    console.log("userId",userId);
+    const { subject, reportType } = req.query;
+
+  if (!subject || !reportType) {
+    return res.status(400).json({ message: "Missing required query parameters" });
+  }
+  // Extract Organization ID from `subject=Organization/12345`
+  const match = subject.match(/^Organization\/(.+)$/);
+  if (!match) {
+    return res.status(400).json({ 
+      resourceType: 'OperationOutcome',
+      reportType: reportType,
+      issue: [
+          {
+              severity: 'error',
+              code: 'invalid-subject',
+              details: {
+                text: 'Invalid subject format. Expected Organization/12345',
+              },
+          }]
+     });
+  }
   
+  const organizationId = match[1];
+    console.log('userId', organizationId);
+
     try {
-      // Count unique specializations
+     
       const aggregation = await AddDoctors.aggregate([
         {
-          $match: { bussinessId: userId },
+          $match: { bussinessId: organizationId },
         },
         {
           $group: {
@@ -275,32 +515,48 @@ const AddDoctorsController = {
           $count: 'totalSpecializations', // Directly count distinct specializations
         },
       ]);
-  
+
       // Total doctors under this business
-      const totalDoctors = await AddDoctors.countDocuments({ bussinessId: userId });
-  
-      // Count available doctors
-      const availableDoctors = await AddDoctors.countDocuments({ 
-        bussinessId: userId, 
-        isAvailable: '1' 
+      const totalDoctors = await AddDoctors.countDocuments({
+        bussinessId: organizationId,
       });
-  
+
+      // Count available doctors
+      const availableDoctors = await AddDoctors.countDocuments({
+        bussinessId: organizationId,
+        isAvailable: '1',
+      });
+
       const overview = {
         totalDoctors,
         totalSpecializations: aggregation[0]?.totalSpecializations || 0,
         availableDoctors,
       };
-  
-      return res.status(200).json(overview);
+      console.log('Overview:', overview);
+
+      const data = new FHIRConverter(overview)
+      const response = data.overviewConvertToFHIR()
+      // console.log('FHIR response:', JSON.stringify(response));
+      return res.status(200).json(JSON.stringify(response));
+ 
     } catch (error) {
       console.error('Error fetching overview data:', error);
-      return res.status(500).json({ message: 'Internal server error', error });
+      return res.status(500).json({
+        resourceType: 'OperationOutcome',
+        issue: [
+          {
+            severity: 'error',
+            code: 'exception',
+            details: {
+              text: error.message,
+            },
+          }]
+      })
     }
   },
   getForAppDoctorsBySpecilizationId: async (req, res) => {
     try {
-     
-      const { userId ,value} = req.query;
+      const { userId, value } = req.query;
 
       const doctors = await AddDoctors.find({
         'professionalBackground.specialization': { $exists: true, $eq: value },
@@ -346,17 +602,16 @@ const AddDoctorsController = {
   searchDoctorsByName: async (req, res) => {
     try {
       const { name, bussinessId } = req.query;
-      console.log('name', name,bussinessId);
+      console.log('name', name, bussinessId);
 
       if (!bussinessId) {
         return res.status(400).json({ message: 'Business ID is required' });
       }
 
-      const [firstName = '', lastName = ''] =name? name.split(' '):"";
-      
+      const [firstName = '', lastName = ''] = name ? name.split(' ') : '';
 
       const searchFilter = {
-        bussinessId, 
+        bussinessId,
         $or: [
           { 'personalInfo.firstName': { $regex: firstName, $options: 'i' } },
           { 'personalInfo.lastName': { $regex: lastName, $options: 'i' } },
@@ -367,11 +622,6 @@ const AddDoctorsController = {
         'personalInfo.firstName personalInfo.lastName personalInfo.image professionalBackground.specialization professionalBackground.qualification userId isAvailable'
       );
 
-      // if (!doctors.length) {
-      //   return res.status(200).json({ message: 'No doctors found', data: {} });
-      // }
-
-      // Extract unique specialization IDs
       const specializationIds = [
         ...new Set(
           doctors
@@ -418,10 +668,30 @@ const AddDoctorsController = {
         {}
       );
 
-      res.status(200).json(groupedBySpecialization);
+      const data = new FHIRConverter(groupedBySpecialization);
+
+      const fhirData = data.convertToFHIR();
+      console.log("validate",validateFHIR(fhirData));
+
+      res.status(200).json(fhirData);
     } catch (error) {
       console.error('Error fetching doctors data:', error);
-      res.status(500).json({ message: 'Failed to fetch doctors data', error });
+
+      const operationOutcome = {
+        resourceType: 'OperationOutcome',
+        issue: [
+          {
+            severity: 'error',
+            code: 'processing',
+            diagnostics: 'Failed to fetch doctors data',
+            details: {
+              text: error.message || 'Unknown error'
+            }
+          }
+        ]
+      };
+  
+      res.status(500).json(operationOutcome);
     }
   },
 
@@ -697,6 +967,11 @@ const AddDoctorsController = {
   AddDoctorsSlote: async (req, res) => {
     try {
       const { day, slots } = req.body;
+
+      console.log(
+        'slots',
+        slots.entry.map((slots) => slots.resource)
+      );
       const doctorId = req.params.id;
       console.log(day, slots, doctorId);
       const formattedSlots = slots.map((slot) => ({

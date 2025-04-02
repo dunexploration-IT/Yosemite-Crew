@@ -7,15 +7,15 @@ const {
 } = require('../middlewares/authMiddleware');
 
 // Define the route to add doctors
-router.post('/add-doctors',verifyTokenAndRefresh, AddDoctorsControllers.addDoctor);
+router.post('/Practitioner',verifyTokenAndRefresh, AddDoctorsControllers.addDoctor);
 router.get(
   '/getDoctorsBySpecilizationId/:id',
   AddDoctorsControllers.getDoctorsBySpecilizationId
 );
 router.get('/getForAppDoctorsBySpecilizationId',verifyTokenAndRefresh, AddDoctorsControllers.getForAppDoctorsBySpecilizationId);
-router.get('/getOverview', AddDoctorsControllers.getOverview);
+router.get('/MeasureReport', AddDoctorsControllers.getOverview);
 router.get(
-  '/searchDoctorsByName',
+  '/Practitioner',
   verifyTokenAndRefresh,
   AddDoctorsControllers.searchDoctorsByName
 );

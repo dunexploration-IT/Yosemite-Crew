@@ -16,7 +16,7 @@ const vetSchema = new mongoose.Schema(
       lastName: { type: String },
       gender: {
         type: String,
-        enum: ['Male', 'Female', 'Other'],
+        enum: ['male', 'female', 'other'],
       },
       dateOfBirth: { type: String },
       email: { type: String },
@@ -94,6 +94,11 @@ const vetSchema = new mongoose.Schema(
         },
       ],
       default: [], // Ensures an empty array if no documents are provided
+    },
+    cvFile: {
+      name: { type: String, required: true },
+      type: { type: String, required: true },
+      date: { type: Date, default: Date.now },
     },
     timeDuration: {
       type: Number,

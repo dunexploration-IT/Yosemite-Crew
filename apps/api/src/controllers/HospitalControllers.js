@@ -9,6 +9,8 @@ const S3_BASE_URL = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.amazonaws.com/
 const AWS = require('aws-sdk');
 const ProfileVisibility = require('../models/profileVisibility');
 const Message = require('../models/ChatModel');
+const { default: FHIRConverter } = require('../utils/DoctorsHandler');
+const { default: GraphDataToFHIR } = require('../utils/HospitalFhirHandler');
 
 const s3 = new AWS.S3({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -400,118 +402,107 @@ const HospitalController = {
     }
   },
 
-  AppointmentGraphOnMonthBase: async (req, res) => {
+   AppointmentGraphOnMonthBase:async (req, res) => {
     const monthNames = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
     ];
-
+  
     try {
       const { days, userId } = req.query;
-      const Month = parseInt(days, 10) || 6;
-      console.log('UserId:', userId);
-
+      const monthsToFetch = parseInt(days, 10) || 6; // Default to last 6 months if not provided
+  
+      if (!userId) {
+        return res.status(400).json({ message: "UserId is required" });
+      }
+  
+      console.log("UserId:", userId);
+  
       const endMonth = new Date();
       const startMonth = new Date();
+      startMonth.setMonth(endMonth.getMonth() - (monthsToFetch - 1));
       startMonth.setDate(1);
-      startMonth.setMonth(endMonth.getMonth() - (Month - 1));
-
-      // Ensure correct date range
+  
+      // Define date range (first day of startMonth to first day of next month of endMonth)
       const gt = new Date(startMonth.getFullYear(), startMonth.getMonth(), 1);
       const lt = new Date(endMonth.getFullYear(), endMonth.getMonth() + 1, 1);
 
-      console.log('Fetching data from:', gt, 'to', lt);
-
+  
       const aggregatedAppointments = await webAppointments.aggregate([
         {
           $match: {
-            hospitalId: userId, // Ensure userId is string
+            hospitalId: userId,
             appointmentDate: {
-              $gte: gt.toISOString().split('T')[0], // Convert dates to string format
-              $lt: lt.toISOString().split('T')[0],
+              $gte: gt.toISOString().split("T")[0],
+              $lt: lt.toISOString().split("T")[0],
             },
           },
         },
         {
           $group: {
-            _id: {
-              year: { $year: { $toDate: '$appointmentDate' } }, // Convert string date to actual Date
-              month: { $month: { $toDate: '$appointmentDate' } },
-            },
+            _id: { month: { $month: { $toDate: "$appointmentDate" } } },
             totalAppointments: { $sum: 1 },
-            successful: {
-              $sum: { $cond: [{ $eq: ['$isCanceled', 1] }, 1, 0] },
-            },
-            canceled: {
-              $sum: { $cond: [{ $eq: ['$isCanceled', 2] }, 1, 0] },
-            },
+            successful: { $sum: { $cond: [{ $eq: ["$appointmentStatus", "fulfilled"] }, 1, 0] } },
+            canceled: { $sum: { $cond: [{ $eq: ["$appointmentStatus", "cancelled"] }, 1, 0] } },
           },
         },
         {
           $project: {
             _id: 0,
-            year: '$_id.year',
-            month: '$_id.month',
+            month: "$_id.month",
             totalAppointments: 1,
             successful: 1,
             canceled: 1,
           },
         },
       ]);
-
-      console.log('Aggregated Data:', aggregatedAppointments);
-
+  
+      console.log("Aggregated Data:", aggregatedAppointments);
+  
       const results = [];
       let currentDate = new Date(startMonth);
-
+  
       while (currentDate <= endMonth) {
-        const month = currentDate.getMonth() + 1;
-        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth() + 1; // Get month number (1-12)
         const monthName = monthNames[month - 1];
-
-        const existingData = aggregatedAppointments.find(
-          (item) => item.month === month && item.year === year
-        );
-
+  
+        const existingData = aggregatedAppointments.find(item => item.month === month);
+  
         results.push(
-          existingData || {
-            year,
-            month,
-            monthName,
-            totalAppointments: 0,
-            successful: 0,
-            canceled: 0,
-          }
+          existingData
+            ? { ...existingData, monthName }
+            : { month, monthName, totalAppointments: 0, successful: 0, canceled: 0 }
         );
-
+  
         currentDate.setMonth(currentDate.getMonth() + 1);
       }
 
-      results.sort((a, b) => a.year - b.year || a.month - b.month);
-      console.log('Final Results:', results);
+      results.sort((a, b) => a.month - b.month);
 
+      const data = new GraphDataToFHIR(results).convertToFHIR();
+  console.log("hihihihih", JSON.stringify(data));
+      console.log("Final Sorted Graph Data:", results);
+  
       return res.status(200).json({
-        message: 'Appointment data for the last X months fetched successfully',
-        data: results,
+        message: "Appointment data for the last X months fetched successfully",
+        data: JSON.stringify(data)
       });
     } catch (error) {
-      console.error('Error in AppointmentGraphOnMonthBase:', error);
+      console.error("Error in AppointmentGraphOnMonthBase:", error);
       return res.status(500).json({
-        message: 'An error occurred while fetching data.',
-        error: error.message,
+       resourceType: "OperationOutcome",
+       issue: [
+        {
+          severity: 'error',
+          code: 'processing',
+          details: {
+            text: error.message,
+          },
+        }
+       ]
       });
     }
-  },
+  },  
   WaitingRoomOverView: async (req, res) => {
     try {
       const { userId } = req.query;
@@ -1426,7 +1417,32 @@ const HospitalController = {
   },
   hospitalDashboard: async (req, res) => {
     try {
-      const { userId, LastDays = 7 } = req.query;
+       const { subject, reportType } = req.query;
+
+  if (!subject || !reportType) {
+    return res.status(400).json({ message: "Missing required query parameters" });
+  }
+  // Extract Organization ID from `subject=Organization/12345`
+  const match = subject.match(/^Organization\/(.+)$/);
+  if (!match) {
+    return res.status(400).json({ 
+      resourceType: 'OperationOutcome',
+      reportType: reportType,
+      issue: [
+          {
+              severity: 'error',
+              code: 'invalid-subject',
+              details: {
+                text: 'Invalid subject format. Expected Organization/12345',
+              },
+          }]
+     });
+  }
+  
+  const userId = match[1];
+
+
+      const {  LastDays = 7 } = req.query;
       const days = parseInt(LastDays, 10) || 7;
       const endDate = new Date();
       const startDate = new Date();
@@ -1451,14 +1467,29 @@ const HospitalController = {
       const totalDepartments = await Department.countDocuments({
         bussinessId: userId,
       });
-      res.status(200).json({
+      const data = new FHIRConverter({
         totalDoctors,
         totalDepartments,
         appointmentCounts,
-      });
+      }).overviewConvertToFHIR();
+      res.status(200).json(JSON.stringify(data));
+      
     } catch (error) {
       console.error('Error getting hospital dashboard data:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      res
+        .status(500)
+        .json({
+          resourceType: 'OperationOutcome',
+          issue:[
+            {
+              severity: 'error',
+              code: 'exception',
+              details: {
+                text: error.message,
+              },
+            }
+          ]
+        });
     }
   },
   getAppointmentsForHospitalDashboard: async (req, res) => {

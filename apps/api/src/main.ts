@@ -80,6 +80,10 @@ app.use('/api/hospitals', hospitalRoutes);
 app.use('/api/inventory', InventoryRoutes);
 app.use("/fhir",fhir);
 app.use('/fhir/extensions', fhirRoutes);
+app.use('/fhir/v1', doctorRoutes);
+app.use('/fhir/v1', apointmentRoutes);
+app.use('/fhir/v1', hospitalRoutes);
+
 
 // Global error handler
 app.use((err, req, res, next) => {

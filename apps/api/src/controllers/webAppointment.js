@@ -1,12 +1,25 @@
+// const { json } = require('body-parser');
 const DoctorsTimeSlotes = require('../models/DoctorsSlotes');
 const {
   AppointmentsToken,
   webAppointments,
 } = require('../models/WebAppointment');
+const WebAppointmentHandler = require('../utils/WebAppointmentHandler');
+const FHIRSlotConverter = require('../utils/FhirSlotConverter');
 
 const webAppointmentController = {
   createWebAppointment: async (req, res) => {
     try {
+      // Log FHIR request to debug incoming data
+      console.log('Raw FHIR Data:', JSON.stringify(req.body, null, 2));
+
+      // Instantiate the FHIRToNormalConverter
+      const fhirConverter = new WebAppointmentHandler(req.body);
+
+      // Convert FHIR to normal data
+      const normalData = fhirConverter.convertToNormal();
+      console.log('Converted Data:', normalData);
+
       const {
         hospitalId,
         HospitalName,
@@ -30,21 +43,26 @@ const webAppointmentController = {
         appointmentDate,
         day,
         timeSlots,
-      } = req.body;
+      } = normalData;
 
-      console.log('Received Request Body:', req.body);
+      if (!hospitalId || !HospitalName || !ownerName || !appointmentDate) {
+        console.error('Missing required fields.');
+        return res
+          .status(400)
+          .json({ message: 'Required fields are missing.' });
+      }
 
-      const initials = HospitalName.split(' ')
-        .map((word) => word[0])
-        .join('');
+      const initials = HospitalName
+        ? HospitalName.split(' ')
+            .map((word) => word[0])
+            .join('')
+        : 'XX';
 
       let Appointmenttoken = await AppointmentsToken.findOneAndUpdate(
         { hospitalId, appointmentDate },
         { $inc: { tokenCounts: 1 } },
         { new: true, upsert: true }
       );
-
-      console.log('Token Record Found:', Appointmenttoken);
 
       const tokenNumber = `${initials}00${Appointmenttoken.tokenCounts}-${appointmentDate}`;
       console.log('Generated Token Number:', tokenNumber);
@@ -70,26 +88,54 @@ const webAppointmentController = {
         department,
         veterinarian,
         appointmentDate,
-        appointmentTime: timeSlots[0].time,
+        appointmentTime: timeSlots?.[0]?.time || '',
         day,
-        appointmentTime24: timeSlots[0].time24,
-        slotsId: timeSlots[0]._id,
+        appointmentTime24: timeSlots?.[0]?.time24 || '',
+        slotsId: timeSlots?.[0]?._id || '',
       });
-
-      console.log('Web Appointment Created:', response);
 
       if (response) {
         return res.status(200).json({
-          message: 'Appointment created successfully',
+          resourceType: 'OperationOutcome',
+          status: 'success',
+          issue: [
+            {
+              severity: 'information',
+              code: 'informational',
+              details: {
+                text: 'Appointment created successfully',
+              },
+            },
+          ],
           data: response,
         });
       }
 
-      console.log('Failed to create appointment');
-      return res.status(400).json({ message: 'Failed to create Appointment' });
+      return res.status(400).json({
+        resourceType: 'OperationOutcome',
+        issue: [
+          {
+            severity: 'error',
+            code: 'bad',
+            details: { text: 'Appointment creation failed' },
+          },
+        ],
+      });
     } catch (error) {
       console.error('Error in createWebAppointment:', error);
-      res.status(500).json({ message: 'Internal Server Error' });
+      res.status(500).json({
+        resourceType: 'OperationOutcome',
+        issue: [
+          {
+            severity: 'error',
+            code: 'exception',
+            details: {
+              text: 'Internal server error while creating appointment.',
+            },
+            diagnostics: error.message, // Include actual error message
+          },
+        ],
+      });
     }
   },
 
@@ -120,10 +166,20 @@ const webAppointmentController = {
           ...slot.toObject(),
           isBooked: bookedSlotIds.includes(slot._id.toString()),
         }));
+        console.log("bookedSlotIds", updatedTimeSlots) 
+        const fhirConverter = await new FHIRSlotConverter(
+          updatedTimeSlots,
+          doctorId,
+          null,
+          date
+        );
+        const fhirBundle = fhirConverter.convertToFHIRBundle();
 
+        // 🎉 Output the converted FHIR bundle
+        console.log('hellooooo', JSON.stringify(fhirBundle, null, 2));
         return res.status(200).json({
           message: 'Data fetched successfully',
-          timeSlots: updatedTimeSlots,
+          timeSlots: fhirBundle,
         });
       } else {
         return res.status(200).json({
